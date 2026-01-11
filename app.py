@@ -48,9 +48,114 @@ SP500_TICKERS = [
     "WDC", "WEC", "WELL", "WFC", "WM", "WMB", "WMT", "WRB", "WST", "WTW", "WY", "WYNN", "XEL", "XOM", "XYL", "YUM", "ZBH", "ZBRA", "ZTS"
 ]
 
+# Company names mapping
+COMPANY_NAMES = {
+    "A": "Agilent Technologies", "AAPL": "Apple Inc.", "ABBV": "AbbVie Inc.", "ABNB": "Airbnb", "ABT": "Abbott Laboratories",
+    "ACGL": "Arch Capital Group", "ACN": "Accenture", "ADBE": "Adobe Inc.", "ADI": "Analog Devices", "ADM": "Archer-Daniels-Midland",
+    "ADP": "ADP", "ADSK": "Autodesk", "AEE": "Ameren Corp", "AEP": "American Electric Power", "AES": "AES Corp",
+    "AFL": "Aflac", "AIG": "American International Group", "AIZ": "Assurant", "AJG": "Arthur J. Gallagher", "AKAM": "Akamai Technologies",
+    "ALB": "Albemarle Corp", "ALGN": "Align Technology", "ALL": "Allstate Corp", "ALLE": "Allegion", "AMAT": "Applied Materials",
+    "AMCR": "Amcor", "AMD": "Advanced Micro Devices", "AME": "AMETEK", "AMGN": "Amgen", "AMP": "Ameriprise Financial",
+    "AMT": "American Tower", "AMZN": "Amazon", "ANET": "Arista Networks", "ANSS": "ANSYS", "AON": "Aon plc",
+    "AOS": "A. O. Smith", "APA": "APA Corp", "APD": "Air Products & Chemicals", "APH": "Amphenol", "APTV": "Aptiv",
+    "ARE": "Alexandria Real Estate", "ATO": "Atmos Energy", "AVB": "AvalonBay Communities", "AVGO": "Broadcom Inc.", "AVY": "Avery Dennison",
+    "AWK": "American Water Works", "AXON": "Axon Enterprise", "AXP": "American Express", "AZO": "AutoZone", "BA": "Boeing",
+    "BAC": "Bank of America", "BALL": "Ball Corp", "BAX": "Baxter International", "BBWI": "Bath & Body Works", "BBY": "Best Buy",
+    "BDX": "Becton Dickinson", "BEN": "Franklin Resources", "BG": "Bunge Ltd", "BIIB": "Biogen", "BIO": "Bio-Rad Laboratories",
+    "BK": "Bank of New York Mellon", "BKNG": "Booking Holdings", "BKR": "Baker Hughes", "BLDR": "Builders FirstSource", "BLK": "BlackRock",
+    "BMY": "Bristol-Myers Squibb", "BR": "Broadridge Financial", "BRK-B": "Berkshire Hathaway", "BRO": "Brown & Brown", "BSX": "Boston Scientific",
+    "BWA": "BorgWarner", "BX": "Blackstone", "BXP": "Boston Properties", "C": "Citigroup", "CAG": "Conagra Brands",
+    "CAH": "Cardinal Health", "CARR": "Carrier Global", "CAT": "Caterpillar", "CB": "Chubb Ltd", "CBOE": "Cboe Global Markets",
+    "CBRE": "CBRE Group", "CCI": "Crown Castle", "CCL": "Carnival Corp", "CDNS": "Cadence Design Systems", "CDW": "CDW Corp",
+    "CE": "Celanese Corp", "CEG": "Constellation Energy", "CF": "CF Industries", "CFG": "Citizens Financial Group", "CHD": "Church & Dwight",
+    "CHRW": "C.H. Robinson", "CHTR": "Charter Communications", "CI": "Cigna Group", "CINF": "Cincinnati Financial", "CL": "Colgate-Palmolive",
+    "CLX": "Clorox", "CMA": "Comerica", "CMCSA": "Comcast", "CME": "CME Group", "CMG": "Chipotle Mexican Grill",
+    "CMI": "Cummins", "CMS": "CMS Energy", "CNC": "Centene Corp", "CNP": "CenterPoint Energy", "COF": "Capital One",
+    "COO": "Cooper Companies", "COP": "ConocoPhillips", "COR": "Cencora", "COST": "Costco", "CPAY": "Corpay",
+    "CPB": "Campbell Soup", "CPRT": "Copart", "CPT": "Camden Property Trust", "CRL": "Charles River Laboratories", "CRM": "Salesforce",
+    "CSCO": "Cisco Systems", "CSGP": "CoStar Group", "CSX": "CSX Corp", "CTAS": "Cintas", "CTLT": "Catalent",
+    "CTRA": "Coterra Energy", "CTSH": "Cognizant", "CTVA": "Corteva", "CVS": "CVS Health", "CVX": "Chevron",
+    "D": "Dominion Energy", "DAL": "Delta Air Lines", "DAY": "Dayforce", "DD": "DuPont", "DE": "Deere & Co",
+    "DECK": "Deckers Outdoor", "DFS": "Discover Financial", "DG": "Dollar General", "DGX": "Quest Diagnostics", "DHI": "D.R. Horton",
+    "DHR": "Danaher", "DIS": "Walt Disney", "DLR": "Digital Realty", "DLTR": "Dollar Tree", "DOC": "Healthpeak Properties",
+    "DOV": "Dover Corp", "DOW": "Dow Inc.", "DPZ": "Domino's Pizza", "DRI": "Darden Restaurants", "DTE": "DTE Energy",
+    "DUK": "Duke Energy", "DVA": "DaVita", "DVN": "Devon Energy", "DXCM": "DexCom", "EA": "Electronic Arts",
+    "EBAY": "eBay", "ECL": "Ecolab", "ED": "Consolidated Edison", "EFX": "Equifax", "EG": "Everest Group",
+    "EIX": "Edison International", "EL": "Estée Lauder", "ELV": "Elevance Health", "EMN": "Eastman Chemical", "EMR": "Emerson Electric",
+    "ENPH": "Enphase Energy", "EOG": "EOG Resources", "EPAM": "EPAM Systems", "EQIX": "Equinix", "EQR": "Equity Residential",
+    "EQT": "EQT Corp", "ES": "Eversource Energy", "ESS": "Essex Property Trust", "ETN": "Eaton Corp", "ETR": "Entergy",
+    "ETSY": "Etsy", "EVRG": "Evergy", "EW": "Edwards Lifesciences", "EXC": "Exelon", "EXPD": "Expeditors International",
+    "EXPE": "Expedia Group", "EXR": "Extra Space Storage", "F": "Ford Motor", "FANG": "Diamondback Energy", "FAST": "Fastenal",
+    "FCX": "Freeport-McMoRan", "FDS": "FactSet", "FDX": "FedEx", "FE": "FirstEnergy", "FFIV": "F5 Inc",
+    "FI": "Fiserv", "FICO": "Fair Isaac Corp", "FIS": "Fidelity National Info", "FITB": "Fifth Third Bancorp", "FLT": "Fleetcor Technologies",
+    "FMC": "FMC Corp", "FOX": "Fox Corp Class B", "FOXA": "Fox Corp Class A", "FRT": "Federal Realty", "FSLR": "First Solar",
+    "FTNT": "Fortinet", "FTV": "Fortive", "GD": "General Dynamics", "GDDY": "GoDaddy", "GE": "GE Aerospace",
+    "GEHC": "GE HealthCare", "GEN": "Gen Digital", "GEV": "GE Vernova", "GILD": "Gilead Sciences", "GIS": "General Mills",
+    "GL": "Globe Life", "GLW": "Corning Inc", "GM": "General Motors", "GNRC": "Generac Holdings", "GOOG": "Alphabet Class C",
+    "GOOGL": "Alphabet Class A", "GPC": "Genuine Parts", "GPN": "Global Payments", "GRMN": "Garmin", "GS": "Goldman Sachs",
+    "GWW": "W.W. Grainger", "HAL": "Halliburton", "HAS": "Hasbro", "HBAN": "Huntington Bancshares", "HCA": "HCA Healthcare",
+    "HD": "Home Depot", "HES": "Hess Corp", "HIG": "Hartford Financial", "HII": "Huntington Ingalls", "HLT": "Hilton Worldwide",
+    "HOLX": "Hologic", "HON": "Honeywell", "HPE": "Hewlett Packard Enterprise", "HPQ": "HP Inc", "HRL": "Hormel Foods",
+    "HSIC": "Henry Schein", "HST": "Host Hotels & Resorts", "HSY": "Hershey", "HUBB": "Hubbell Inc", "HUM": "Humana",
+    "HWM": "Howmet Aerospace", "IBM": "IBM", "ICE": "Intercontinental Exchange", "IDXX": "IDEXX Laboratories", "IEX": "IDEX Corp",
+    "IFF": "International Flavors", "ILMN": "Illumina", "INCY": "Incyte", "INTC": "Intel", "INTU": "Intuit",
+    "INVH": "Invitation Homes", "IP": "International Paper", "IPG": "Interpublic Group", "IQV": "IQVIA Holdings", "IR": "Ingersoll Rand",
+    "IRM": "Iron Mountain", "ISRG": "Intuitive Surgical", "IT": "Gartner", "ITW": "Illinois Tool Works", "J": "Jacobs Solutions",
+    "JBHT": "J.B. Hunt Transport", "JBL": "Jabil", "JCI": "Johnson Controls", "JKHY": "Jack Henry & Associates", "JNJ": "Johnson & Johnson",
+    "JNPR": "Juniper Networks", "JPM": "JPMorgan Chase", "K": "Kellanova", "KDP": "Keurig Dr Pepper", "KEY": "KeyCorp",
+    "KEYS": "Keysight Technologies", "KHC": "Kraft Heinz", "KIM": "Kimco Realty", "KKR": "KKR & Co", "KLAC": "KLA Corp",
+    "KMB": "Kimberly-Clark", "KMI": "Kinder Morgan", "KMX": "CarMax", "KO": "Coca-Cola", "KR": "Kroger",
+    "KVUE": "Kenvue", "L": "Loews Corp", "LDOS": "Leidos Holdings", "LEN": "Lennar", "LH": "Labcorp Holdings",
+    "LHX": "L3Harris Technologies", "LIN": "Linde plc", "LKQ": "LKQ Corp", "LLY": "Eli Lilly", "LMT": "Lockheed Martin",
+    "LNT": "Alliant Energy", "LOW": "Lowe's", "LRCX": "Lam Research", "LULU": "Lululemon Athletica", "LUV": "Southwest Airlines",
+    "LVS": "Las Vegas Sands", "LW": "Lamb Weston", "LYB": "LyondellBasell", "LYV": "Live Nation Entertainment", "MA": "Mastercard",
+    "MAA": "Mid-America Apartment", "MAR": "Marriott International", "MAS": "Masco Corp", "MCD": "McDonald's", "MCHP": "Microchip Technology",
+    "MCK": "McKesson", "MCO": "Moody's Corp", "MDLZ": "Mondelez International", "MDT": "Medtronic", "MET": "MetLife",
+    "META": "Meta Platforms", "MGM": "MGM Resorts", "MHK": "Mohawk Industries", "MKC": "McCormick & Co", "MKTX": "MarketAxess",
+    "MLM": "Martin Marietta", "MMC": "Marsh McLennan", "MMM": "3M", "MNST": "Monster Beverage", "MO": "Altria Group",
+    "MOH": "Molina Healthcare", "MOS": "Mosaic Co", "MPC": "Marathon Petroleum", "MPWR": "Monolithic Power Systems", "MRK": "Merck & Co",
+    "MRNA": "Moderna", "MRO": "Marathon Oil", "MS": "Morgan Stanley", "MSCI": "MSCI Inc", "MSFT": "Microsoft",
+    "MSI": "Motorola Solutions", "MTB": "M&T Bank", "MTCH": "Match Group", "MTD": "Mettler-Toledo", "MU": "Micron Technology",
+    "NCLH": "Norwegian Cruise Line", "NDAQ": "Nasdaq Inc", "NDSN": "Nordson Corp", "NEE": "NextEra Energy", "NEM": "Newmont",
+    "NFLX": "Netflix", "NI": "NiSource", "NKE": "Nike", "NOC": "Northrop Grumman", "NOW": "ServiceNow",
+    "NRG": "NRG Energy", "NSC": "Norfolk Southern", "NTAP": "NetApp", "NTRS": "Northern Trust", "NUE": "Nucor",
+    "NVDA": "NVIDIA", "NVR": "NVR Inc", "NWS": "News Corp Class B", "NWSA": "News Corp Class A", "O": "Realty Income",
+    "ODFL": "Old Dominion Freight", "OKE": "ONEOK", "OMC": "Omnicom Group", "ON": "ON Semiconductor", "ORCL": "Oracle",
+    "ORLY": "O'Reilly Automotive", "OTIS": "Otis Worldwide", "OXY": "Occidental Petroleum", "PANW": "Palo Alto Networks", "PARA": "Paramount Global",
+    "PAYC": "Paycom Software", "PAYX": "Paychex", "PCAR": "PACCAR", "PCG": "PG&E Corp", "PEG": "Public Service Enterprise",
+    "PEP": "PepsiCo", "PFE": "Pfizer", "PFG": "Principal Financial", "PG": "Procter & Gamble", "PGR": "Progressive Corp",
+    "PH": "Parker-Hannifin", "PHM": "PulteGroup", "PKG": "Packaging Corp of America", "PLD": "Prologis", "PM": "Philip Morris International",
+    "PNC": "PNC Financial", "PNR": "Pentair", "PNW": "Pinnacle West Capital", "PODD": "Insulet Corp", "POOL": "Pool Corp",
+    "PPG": "PPG Industries", "PPL": "PPL Corp", "PRU": "Prudential Financial", "PSA": "Public Storage", "PSX": "Phillips 66",
+    "PTC": "PTC Inc", "PWR": "Quanta Services", "PXD": "Pioneer Natural Resources", "QCOM": "Qualcomm", "QRVO": "Qorvo",
+    "RCL": "Royal Caribbean", "REG": "Regency Centers", "REGN": "Regeneron Pharmaceuticals", "RF": "Regions Financial", "RJF": "Raymond James Financial",
+    "RL": "Ralph Lauren", "RMD": "ResMed", "ROK": "Rockwell Automation", "ROL": "Rollins Inc", "ROP": "Roper Technologies",
+    "ROST": "Ross Stores", "RSG": "Republic Services", "RTX": "RTX Corp", "SBAC": "SBA Communications", "SBUX": "Starbucks",
+    "SCHW": "Charles Schwab", "SHW": "Sherwin-Williams", "SJM": "J.M. Smucker", "SLB": "Schlumberger", "SMCI": "Super Micro Computer",
+    "SNA": "Snap-on", "SNPS": "Synopsys", "SO": "Southern Company", "SOLV": "Solventum", "SPG": "Simon Property Group",
+    "SPGI": "S&P Global", "SRE": "Sempra", "STE": "STERIS", "STLD": "Steel Dynamics", "STT": "State Street",
+    "STX": "Seagate Technology", "STZ": "Constellation Brands", "SWK": "Stanley Black & Decker", "SWKS": "Skyworks Solutions", "SYF": "Synchrony Financial",
+    "SYK": "Stryker", "SYY": "Sysco", "T": "AT&T", "TAP": "Molson Coors", "TDG": "TransDigm Group",
+    "TDY": "Teledyne Technologies", "TECH": "Bio-Techne", "TEL": "TE Connectivity", "TER": "Teradyne", "TFC": "Truist Financial",
+    "TFX": "Teleflex", "TGT": "Target", "TJX": "TJX Companies", "TMO": "Thermo Fisher Scientific", "TMUS": "T-Mobile US",
+    "TPR": "Tapestry Inc", "TRGP": "Targa Resources", "TRMB": "Trimble Inc", "TROW": "T. Rowe Price", "TRV": "Travelers Companies",
+    "TSCO": "Tractor Supply", "TSLA": "Tesla", "TSN": "Tyson Foods", "TT": "Trane Technologies", "TTWO": "Take-Two Interactive",
+    "TXN": "Texas Instruments", "TXT": "Textron", "TYL": "Tyler Technologies", "UAL": "United Airlines", "UBER": "Uber Technologies",
+    "UDR": "UDR Inc", "UHS": "Universal Health Services", "ULTA": "Ulta Beauty", "UNH": "UnitedHealth Group", "UNP": "Union Pacific",
+    "UPS": "United Parcel Service", "URI": "United Rentals", "USB": "U.S. Bancorp", "V": "Visa", "VICI": "VICI Properties",
+    "VLO": "Valero Energy", "VLTO": "Veralto", "VMC": "Vulcan Materials", "VRSK": "Verisk Analytics", "VRSN": "VeriSign",
+    "VRTX": "Vertex Pharmaceuticals", "VST": "Vistra", "VTR": "Ventas", "VTRS": "Viatris", "VZ": "Verizon",
+    "WAB": "Westinghouse Air Brake", "WAT": "Waters Corp", "WBA": "Walgreens Boots Alliance", "WBD": "Warner Bros. Discovery", "WDC": "Western Digital",
+    "WEC": "WEC Energy Group", "WELL": "Welltower", "WFC": "Wells Fargo", "WM": "Waste Management", "WMB": "Williams Companies",
+    "WMT": "Walmart", "WRB": "W. R. Berkley", "WST": "West Pharmaceutical", "WTW": "Willis Towers Watson", "WY": "Weyerhaeuser",
+    "WYNN": "Wynn Resorts", "XEL": "Xcel Energy", "XOM": "Exxon Mobil", "XYL": "Xylem Inc", "YUM": "Yum! Brands",
+    "ZBH": "Zimmer Biomet", "ZBRA": "Zebra Technologies", "ZTS": "Zoetis"
+}
+
 @dataclass
 class StockAnalysis:
     ticker: str
+    company_name: str
     current_price: float
     mean_price: float
     std_dev: float
@@ -176,7 +281,7 @@ def analyze_stock(ticker, df):
         signal_strength = "WEAK"
     else:
         signal_strength = "MINIMAL"
-    return StockAnalysis(ticker=ticker, current_price=round(current_price, 2), mean_price=round(mean_price, 2), std_dev=round(std_dev, 2), z_score=round(z_score, 2), rsi=round(rsi, 1), gap_from_mean=round(current_price - mean_price, 2), gap_percentage=round(gap_percentage, 1), reversion_probability=round(reversion_probability, 3), expected_days_to_revert=round(min(max(half_life * (1 + 0.5 * abs_z), 3), 45), 1), half_life=round(half_life, 1), signal_strength=signal_strength, direction="LONG" if z_score < 0 else "SHORT", prices=prices.tolist(), dates=dates)
+    return StockAnalysis(ticker=ticker, company_name=COMPANY_NAMES.get(ticker, ticker), current_price=round(current_price, 2), mean_price=round(mean_price, 2), std_dev=round(std_dev, 2), z_score=round(z_score, 2), rsi=round(rsi, 1), gap_from_mean=round(current_price - mean_price, 2), gap_percentage=round(gap_percentage, 1), reversion_probability=round(reversion_probability, 3), expected_days_to_revert=round(min(max(half_life * (1 + 0.5 * abs_z), 3), 45), 1), half_life=round(half_life, 1), signal_strength=signal_strength, direction="LONG" if z_score < 0 else "SHORT", prices=prices.tolist(), dates=dates)
 
 
 @app.route('/')
@@ -224,6 +329,8 @@ def index():
         .stock-card.selected { border-color: #22c55e; box-shadow: 0 0 20px rgba(34,197,94,0.3); }
         .stock-card-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
         .stock-ticker { font-size: 20px; font-weight: 700; color: #fff; }
+        .company-name { font-size: 12px; color: #9ca3af; margin: 2px 0 6px 0; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .detail-company { font-size: 16px; color: #22c55e; margin-bottom: 4px; }
         .direction-badge { font-size: 12px; padding: 4px 10px; border-radius: 9999px; background: rgba(34,197,94,0.2); color: #22c55e; }
         .stock-price-value { font-size: 22px; font-weight: 700; color: #fff; }
         .stock-gap { font-size: 13px; color: #22c55e; }
@@ -431,7 +538,7 @@ def index():
         for (var i = 0; i < stockData.length; i++) {
             var s = stockData[i];
             html += '<div class="glass-card stock-card' + (s.ticker === selectedTicker ? ' selected' : '') + '" data-ticker="' + s.ticker + '">';
-            html += '<div class="stock-card-header"><div><div class="stock-ticker">' + s.ticker + '</div><span class="direction-badge">LONG</span></div>';
+            html += '<div class="stock-card-header"><div><div class="stock-ticker">' + s.ticker + '</div><div class="company-name">' + s.company_name + '</div><span class="direction-badge">LONG</span></div>';
             html += '<div><div class="stock-price-value">$' + s.current_price.toFixed(2) + '</div>';
             html += '<div class="stock-gap">' + s.gap_percentage.toFixed(1) + '% below mean</div></div></div>';
             html += '<div class="stock-metrics"><div><p class="metric-label">Z-Score</p><p class="metric-value">' + s.z_score.toFixed(2) + '</p></div>';
@@ -460,7 +567,7 @@ def index():
             panel.innerHTML = '<div class="empty-state"><h3>Select a Stock</h3></div>';
             return;
         }
-        panel.innerHTML = '<div class="detail-header"><div><h2 class="detail-title">' + s.ticker + '</h2><p style="color:#9ca3af">100-Day History</p></div><div class="signal-badge">LONG</div></div>' +
+        panel.innerHTML = '<div class="detail-header"><div><h2 class="detail-title">' + s.ticker + '</h2><p class="detail-company">' + s.company_name + '</p><p style="color:#9ca3af">100-Day History</p></div><div class="signal-badge">LONG</div></div>' +
             '<div class="chart-container"><canvas id="detailChart"></canvas></div>' +
             '<div class="metrics-grid">' +
             '<div class="metric-box"><p class="metric-box-label">Price</p><p class="metric-box-value">$' + s.current_price.toFixed(2) + '</p></div>' +
@@ -576,7 +683,7 @@ def api_analyze():
         results.sort(key=lambda x: x.composite_score, reverse=True)
         return jsonify({
             "results": [{
-                "ticker": r.ticker, "current_price": r.current_price, "mean_price": r.mean_price,
+                "ticker": r.ticker, "company_name": r.company_name, "current_price": r.current_price, "mean_price": r.mean_price,
                 "std_dev": r.std_dev, "z_score": r.z_score, "rsi": r.rsi,
                 "gap_from_mean": r.gap_from_mean, "gap_percentage": r.gap_percentage,
                 "reversion_probability": r.reversion_probability, "expected_days": r.expected_days_to_revert,
