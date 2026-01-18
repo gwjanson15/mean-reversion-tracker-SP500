@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""S&P 500 Mean Reversion Analysis - Top 10 stocks likely to revert to mean within 30 days"""
+"""
+S&P 500 Mean Reversion Analysis - OVERSOLD STOCKS ONLY
+Uses Yahoo Finance for 1 year of historical data
+"""
 
 import numpy as np
 from scipy import stats
@@ -8,9 +11,12 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import List, Dict
 import logging, threading, os
-from flask import Flask, jsonify
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+from flask import Flask, jsonify
+
 app = Flask(__name__)
 
 stock_data_cache: Dict[str, pd.DataFrame] = {}
@@ -35,112 +41,266 @@ class Stock:
     prob: float
     days: float
     signal: str
-    direction: str
     prices: List[float]
     dates: List[str]
     gap_hist: List[float]
 
-def fetch_data(ticker, days=120):
+
+def fetch_data(ticker: str, days: int = 365) -> pd.DataFrame:
+    """Fetch historical data from Yahoo Finance (1 year)"""
     try:
         import yfinance as yf
-        df = yf.Ticker(ticker).history(start=(datetime.now()-timedelta(days=days)).strftime('%Y-%m-%d'), end=datetime.now().strftime('%Y-%m-%d'), raise_errors=False)
-        if df is None or df.empty or len(df)<50: return None
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        stock = yf.Ticker(ticker)
+        df = stock.history(start=start_date.strftime('%Y-%m-%d'), 
+                          end=end_date.strftime('%Y-%m-%d'),
+                          raise_errors=False)
+        
+        if df is None or df.empty or len(df) < 50:
+            return None
+        
         df = df.reset_index()
         df.columns = [c.lower() for c in df.columns]
+        
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'])
-            if df['date'].dt.tz: df['date'] = df['date'].dt.tz_localize(None)
-        return df[['date','close']].tail(100)
-    except: return None
+            if df['date'].dt.tz is not None:
+                df['date'] = df['date'].dt.tz_localize(None)
+        
+        return df[['date', 'close']].tail(100)
+    except Exception as e:
+        logger.debug(f"Error fetching {ticker}: {e}")
+        return None
+
 
 def fetch_all():
+    """Background thread to fetch all S&P 500 stocks"""
     global stock_data_cache, fetch_status
     import time
-    fetch_status = {"in_progress":True,"completed":0,"failed":0,"total":len(SP500),"message":"Starting...","last_fetch":None}
+    
+    fetch_status = {
+        "in_progress": True,
+        "completed": 0,
+        "failed": 0,
+        "total": len(SP500),
+        "message": "Starting...",
+        "last_fetch": None
+    }
+    
     cache = {}
-    for i,t in enumerate(SP500):
+    
+    for i, t in enumerate(SP500):
         fetch_status["message"] = f"Fetching {t}... ({i+1}/{len(SP500)})"
+        
         df = fetch_data(t)
-        if df is not None: cache[t]=df; fetch_status["completed"]+=1
-        else: fetch_status["failed"]+=1
-        if (i+1)%10==0: time.sleep(0.5)
+        
+        if df is not None and len(df) >= 50:
+            cache[t] = df
+            fetch_status["completed"] += 1
+        else:
+            fetch_status["failed"] += 1
+        
+        # Rate limiting
+        if (i + 1) % 10 == 0:
+            time.sleep(0.5)
+    
     stock_data_cache = cache
-    fetch_status["in_progress"]=False
-    fetch_status["last_fetch"]=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    fetch_status["message"]=f"Done: {fetch_status['completed']} loaded"
+    fetch_status["in_progress"] = False
+    fetch_status["last_fetch"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    fetch_status["message"] = f"Done: {fetch_status['completed']} loaded"
 
-def rsi(prices,p=14):
-    if len(prices)<p+1: return 50.0
-    d=np.diff(prices); g,l=np.where(d>0,d,0),np.where(d<0,-d,0)
-    a=1.0/p; ag,al=g[0],l[0]
-    for i in range(1,len(g)): ag=a*g[i]+(1-a)*ag; al=a*l[i]+(1-a)*al
-    if al<0.0001: return 95.0 if ag>0 else 50.0
-    return max(5,min(95,100-(100/(1+ag/al))))
+
+def rsi(prices, p=14):
+    """Calculate RSI"""
+    if len(prices) < p + 1:
+        return 50.0
+    d = np.diff(prices)
+    g, l = np.where(d > 0, d, 0), np.where(d < 0, -d, 0)
+    a = 1.0 / p
+    ag, al = g[0], l[0]
+    for i in range(1, len(g)):
+        ag = a * g[i] + (1 - a) * ag
+        al = a * l[i] + (1 - a) * al
+    if al < 0.0001:
+        return 95.0 if ag > 0 else 50.0
+    return max(5, min(95, 100 - (100 / (1 + ag / al))))
+
 
 def half_life(prices):
-    if len(prices)<20: return 30.0
+    """Calculate mean reversion half-life"""
+    if len(prices) < 20:
+        return 30.0
     try:
-        y,x=np.diff(prices),prices[:-1]
-        b=np.linalg.lstsq(np.column_stack([np.ones(len(x)),x]),y,rcond=None)[0][1]
-        if b>=0: return 45.0
-        return min(max(-np.log(2)/b,3),60)
-    except: return 30.0
+        y, x = np.diff(prices), prices[:-1]
+        b = np.linalg.lstsq(np.column_stack([np.ones(len(x)), x]), y, rcond=None)[0][1]
+        if b >= 0:
+            return 45.0
+        return min(max(-np.log(2) / b, 3), 60)
+    except:
+        return 30.0
 
-def prob(z,r,hl):
-    zp=stats.norm.cdf(abs(z))-0.5; zp=0.4+0.4*(2*zp)
-    if r<30: rp=0.5+0.4*(30-r)/30
-    elif r>70: rp=0.5+0.4*(r-70)/30
-    else: rp=0.3+0.2*min(abs(r-50),20)/20
-    hp=0.7+0.2*(30-hl)/30 if hl<30 else 0.3+0.4*max(0,(60-hl))/60
-    ag=1.15 if (z<0 and r<40) or (z>0 and r>60) else (0.85 if (z<0 and r>60) or (z>0 and r<40) else 1.0)
-    return min(max((zp*0.35+rp*0.35+hp*0.30)*ag,0.15),0.92)
 
-def analyze(t,df):
-    if df is None or len(df)<50: return None
-    p=df['close'].values; d=df['date'].dt.strftime('%Y-%m-%d').tolist()
-    cur,m,s=p[-1],np.mean(p),np.std(p)
-    if s<0.01: return None
-    z=(cur-m)/s; gap=cur-m; gap_pct=(gap/m)*100
-    gh=[(x-m) for x in p]
-    r,hl=rsi(p),half_life(p)
-    pr=prob(z,r,hl)
-    days=min(max(hl*(1+0.5*abs(z)),3),45)
-    az=abs(z)
-    if az>2.0 and ((z<0 and r<35) or (z>0 and r>65)): sig="STRONG"
-    elif az>1.8 and (r<40 or r>60): sig="MODERATE"
-    elif az>1.5: sig="WEAK"
-    else: sig="MINIMAL"
-    dir="LONG (Oversold)" if z<0 else "SHORT (Overbought)"
-    return Stock(t,NAMES.get(t,t),round(cur,2),round(m,2),round(s,2),round(z,2),round(gap,2),round(gap_pct,2),round(r,1),round(hl,1),round(pr,3),round(days,1),sig,dir,[round(x,2) for x in p],d,[round(x,2) for x in gh])
+def prob(z, r, hl):
+    """Calculate reversion probability"""
+    zp = stats.norm.cdf(abs(z)) - 0.5
+    zp = 0.4 + 0.4 * (2 * zp)
+    
+    if r < 30:
+        rp = 0.6 + 0.3 * (30 - r) / 30
+    elif r < 40:
+        rp = 0.5 + 0.2 * (40 - r) / 10
+    else:
+        rp = 0.3
+    
+    hp = 0.7 + 0.2 * (30 - hl) / 30 if hl < 30 else 0.3 + 0.4 * max(0, (60 - hl)) / 60
+    
+    if z < -1.5 and r < 35:
+        ag = 1.2
+    elif z < -1.0 and r < 40:
+        ag = 1.1
+    else:
+        ag = 1.0
+    
+    return min(max((zp * 0.35 + rp * 0.35 + hp * 0.30) * ag, 0.15), 0.95)
+
+
+def analyze(t, df):
+    """Analyze a single stock - OVERSOLD ONLY"""
+    if df is None or len(df) < 50:
+        return None
+    
+    p = df['close'].values
+    d = df['date'].dt.strftime('%Y-%m-%d').tolist()
+    
+    cur, m, s = p[-1], np.mean(p), np.std(p)
+    
+    if s < 0.01:
+        return None
+    
+    z = (cur - m) / s
+    
+    # ONLY return oversold stocks (negative z-score)
+    if z >= 0:
+        return None
+    
+    gap = cur - m
+    gap_pct = (gap / m) * 100
+    gh = [(x - m) for x in p]
+    
+    r, hl = rsi(p), half_life(p)
+    pr = prob(z, r, hl)
+    
+    days = min(max(hl * (1 + 0.5 * abs(z)), 3), 45)
+    
+    az = abs(z)
+    if az > 2.0 and r < 30:
+        sig = "STRONG BUY"
+    elif az > 1.8 and r < 40:
+        sig = "BUY"
+    elif az > 1.5 and r < 45:
+        sig = "MODERATE BUY"
+    else:
+        sig = "WEAK BUY"
+    
+    return Stock(
+        ticker=t,
+        name=NAMES.get(t, t),
+        price=round(cur, 2),
+        mean=round(m, 2),
+        std=round(s, 2),
+        z=round(z, 2),
+        gap=round(gap, 2),
+        gap_pct=round(gap_pct, 2),
+        rsi=round(r, 1),
+        half_life=round(hl, 1),
+        prob=round(pr, 3),
+        days=round(days, 1),
+        signal=sig,
+        prices=[round(x, 2) for x in p],
+        dates=d,
+        gap_hist=[round(x, 2) for x in gh]
+    )
+
 
 @app.route('/api/fetch', methods=['POST'])
 def api_fetch():
-    if fetch_status["in_progress"]: return jsonify({"error":"Already fetching"})
-    t=threading.Thread(target=fetch_all); t.daemon=True; t.start()
-    return jsonify({"status":"started"})
+    if fetch_status["in_progress"]:
+        return jsonify({"error": "Already fetching"})
+    t = threading.Thread(target=fetch_all)
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "started"})
+
 
 @app.route('/api/status')
 def api_status():
-    return jsonify({"stocks_loaded":len(stock_data_cache),"in_progress":fetch_status["in_progress"],"completed":fetch_status["completed"],"failed":fetch_status["failed"],"total":fetch_status["total"],"message":fetch_status["message"],"last_fetch":fetch_status["last_fetch"]})
+    return jsonify({
+        "stocks_loaded": len(stock_data_cache),
+        "in_progress": fetch_status["in_progress"],
+        "completed": fetch_status["completed"],
+        "failed": fetch_status["failed"],
+        "total": fetch_status["total"],
+        "message": fetch_status["message"],
+        "last_fetch": fetch_status["last_fetch"]
+    })
+
 
 @app.route('/api/analyze')
 def api_analyze():
-    if not stock_data_cache: return jsonify({"error":"No data","results":[]})
-    results=[]
-    for t,df in stock_data_cache.items():
-        a=analyze(t,df)
-        if a and abs(a.z)>=1.0: results.append(a)
-    results.sort(key=lambda x:x.prob,reverse=True)
-    top=results[:10]
-    return jsonify({"results":[{"ticker":r.ticker,"company_name":r.name,"current_price":r.price,"mean_price":r.mean,"std_dev":r.std,"z_score":r.z,"gap_from_mean":r.gap,"gap_percentage":r.gap_pct,"rsi":r.rsi,"half_life":r.half_life,"reversion_probability":r.prob,"expected_days":r.days,"signal_strength":r.signal,"direction":r.direction,"prices":r.prices,"dates":r.dates,"gap_history":r.gap_hist} for r in top],"total_analyzed":len(stock_data_cache),"candidates_found":len(results)})
+    if not stock_data_cache:
+        return jsonify({"error": "No data", "results": []})
+    
+    results = []
+    
+    for t, df in stock_data_cache.items():
+        a = analyze(t, df)
+        if a and a.z <= -1.0:
+            results.append(a)
+    
+    results.sort(key=lambda x: x.prob, reverse=True)
+    top = results[:10]
+    
+    return jsonify({
+        "results": [{
+            "ticker": r.ticker,
+            "company_name": r.name,
+            "current_price": r.price,
+            "mean_price": r.mean,
+            "std_dev": r.std,
+            "z_score": r.z,
+            "gap_from_mean": r.gap,
+            "gap_percentage": r.gap_pct,
+            "rsi": r.rsi,
+            "half_life": r.half_life,
+            "reversion_probability": r.prob,
+            "expected_days": r.days,
+            "signal_strength": r.signal,
+            "prices": r.prices,
+            "dates": r.dates,
+            "gap_history": r.gap_hist
+        } for r in top],
+        "total_analyzed": len(stock_data_cache),
+        "candidates_found": len(results)
+    })
+
 
 @app.route('/')
-def index(): return HTML
+def index():
+    return HTML
 
-HTML='''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>S&P 500 Mean Reversion</title><script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b,#0f172a);min-height:100vh;color:#e2e8f0}.container{max-width:1400px;margin:0 auto;padding:20px}.header{text-align:center;padding:40px 20px;margin-bottom:30px}.header h1{font-size:2.2rem;font-weight:700;background:linear-gradient(135deg,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}.header p{color:#94a3b8}.controls{background:rgba(30,41,59,0.8);border:1px solid rgba(71,85,105,0.5);border-radius:16px;padding:24px;margin-bottom:30px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}.btn{padding:14px 28px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer}.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);color:white}.btn-success{background:linear-gradient(135deg,#22c55e,#16a34a);color:white}.btn:disabled{background:#475569;cursor:not-allowed}.btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(59,130,246,0.4)}.progress-section{flex:1;min-width:200px}.progress-bar{height:8px;background:#334155;border-radius:4px;overflow:hidden;margin-bottom:8px}.progress-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);transition:width 0.3s}.progress-text{font-size:13px;color:#94a3b8}.hidden{display:none!important}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:30px}.stat-card{background:rgba(30,41,59,0.6);border:1px solid rgba(71,85,105,0.3);border-radius:12px;padding:20px;text-align:center}.stat-label{color:#94a3b8;font-size:12px;text-transform:uppercase}.stat-value{font-size:28px;font-weight:700;margin-top:8px}.stat-value.green{color:#34d399}.stat-value.blue{color:#60a5fa}.results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px}.stock-card{background:rgba(30,41,59,0.8);border:1px solid rgba(71,85,105,0.5);border-radius:16px;padding:24px;transition:all 0.3s}.stock-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,0.3)}.stock-header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(71,85,105,0.3)}.stock-ticker{font-size:22px;font-weight:700}.stock-company{font-size:13px;color:#94a3b8;margin-top:4px}.prob-value{font-size:26px;font-weight:700;color:#34d399}.prob-label{font-size:11px;color:#94a3b8}.metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.metric{background:rgba(15,23,42,0.5);border-radius:8px;padding:10px;text-align:center}.metric-label{font-size:10px;color:#64748b;text-transform:uppercase}.metric-value{font-size:14px;font-weight:600;margin-top:4px}.metric-value.positive{color:#34d399}.metric-value.negative{color:#f87171}.direction-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:12px}.direction-badge.long{background:rgba(34,197,94,0.2);color:#34d399}.direction-badge.short{background:rgba(248,113,113,0.2);color:#f87171}.chart-container{height:180px;margin-top:12px;background:rgba(15,23,42,0.3);border-radius:8px;padding:10px}.empty-state{text-align:center;padding:80px 20px;color:#64748b}.empty-state h3{font-size:22px;color:#94a3b8;margin-bottom:12px}.footer{text-align:center;padding:40px 20px;color:#64748b;font-size:13px}</style></head><body><div class="container"><header class="header"><h1>S&P 500 Mean Reversion Analysis</h1><p>Top 10 stocks most likely to revert to their mean within 30 days</p></header><div class="controls"><button class="btn btn-success" id="fetchBtn">Fetch S&P 500 Data</button><div class="progress-section hidden" id="progressSection"><div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div><p class="progress-text" id="progressText">Starting...</p></div><button class="btn btn-primary" id="analyzeBtn" disabled>Find Top 10 Candidates</button></div><div class="stats-grid"><div class="stat-card"><p class="stat-label">Stocks Loaded</p><p class="stat-value" id="stocksLoaded">0</p></div><div class="stat-card"><p class="stat-label">Candidates Found</p><p class="stat-value green" id="candidatesFound">-</p></div><div class="stat-card"><p class="stat-label">Avg Probability</p><p class="stat-value blue" id="avgProbability">-</p></div><div class="stat-card"><p class="stat-label">Last Updated</p><p class="stat-value" id="lastUpdated" style="font-size:16px">-</p></div></div><div id="resultsContainer"><div class="empty-state"><h3>No Analysis Yet</h3><p>Click "Fetch S&P 500 Data" then "Find Top 10 Candidates"</p></div></div><footer class="footer"><p>Mean Reversion Analysis | Data from Yahoo Finance | For informational purposes only</p></footer></div><script>let charts={},poll=null;document.getElementById("fetchBtn").onclick=function(){this.disabled=true;document.getElementById("progressSection").classList.remove("hidden");document.getElementById("progressFill").style.width="0%";fetch("/api/fetch",{method:"POST"}).then(r=>r.json()).then(()=>{poll=setInterval(pollStatus,1000)})};function pollStatus(){fetch("/api/status").then(r=>r.json()).then(d=>{document.getElementById("stocksLoaded").textContent=d.stocks_loaded;if(d.in_progress){const p=d.total>0?(d.completed/d.total*100):0;document.getElementById("progressFill").style.width=p+"%";document.getElementById("progressText").textContent=d.message}else{clearInterval(poll);document.getElementById("progressFill").style.width="100%";document.getElementById("progressText").textContent=d.message;document.getElementById("fetchBtn").disabled=false;if(d.stocks_loaded>0){document.getElementById("analyzeBtn").disabled=false;if(d.last_fetch)document.getElementById("lastUpdated").textContent=d.last_fetch.split(" ")[1]}}})}fetch("/api/status").then(r=>r.json()).then(d=>{document.getElementById("stocksLoaded").textContent=d.stocks_loaded;if(d.stocks_loaded>0){document.getElementById("analyzeBtn").disabled=false;if(d.last_fetch)document.getElementById("lastUpdated").textContent=d.last_fetch.split(" ")[1]}});document.getElementById("analyzeBtn").onclick=function(){this.disabled=true;this.textContent="Analyzing...";fetch("/api/analyze").then(r=>r.json()).then(d=>{if(d.error)alert(d.error);else render(d);this.disabled=false;this.textContent="Find Top 10 Candidates"})};function render(d){document.getElementById("candidatesFound").textContent=d.candidates_found;if(d.results.length>0){const avg=d.results.reduce((s,r)=>s+r.reversion_probability,0)/d.results.length;document.getElementById("avgProbability").textContent=(avg*100).toFixed(1)+"%"}const c=document.getElementById("resultsContainer");if(d.results.length===0){c.innerHTML='<div class="empty-state"><h3>No Candidates Found</h3></div>';return}let h='<div class="results-grid">';d.results.forEach((s,i)=>{const isL=s.z_score<0;h+=`<div class="stock-card"><div class="stock-header"><div><div class="stock-ticker">#${i+1} ${s.ticker}</div><div class="stock-company">${s.company_name}</div></div><div style="text-align:right"><div class="prob-value">${(s.reversion_probability*100).toFixed(1)}%</div><div class="prob-label">Reversion Prob.</div></div></div><span class="direction-badge ${isL?"long":"short"}">${s.direction}</span><div class="metrics-grid"><div class="metric"><div class="metric-label">Current</div><div class="metric-value">$${s.current_price.toFixed(2)}</div></div><div class="metric"><div class="metric-label">Mean</div><div class="metric-value">$${s.mean_price.toFixed(2)}</div></div><div class="metric"><div class="metric-label">Gap</div><div class="metric-value ${s.gap_percentage<0?"negative":"positive"}">${s.gap_percentage>0?"+":""}${s.gap_percentage.toFixed(1)}%</div></div><div class="metric"><div class="metric-label">Z-Score</div><div class="metric-value ${s.z_score<0?"negative":"positive"}">${s.z_score.toFixed(2)}σ</div></div><div class="metric"><div class="metric-label">RSI</div><div class="metric-value">${s.rsi.toFixed(1)}</div></div><div class="metric"><div class="metric-label">Exp. Days</div><div class="metric-value">${s.expected_days.toFixed(0)}</div></div></div><div class="chart-container"><canvas id="chart-${s.ticker}"></canvas></div></div>`});h+="</div>";c.innerHTML=h;d.results.forEach(s=>chart(s))}function chart(s){const cv=document.getElementById("chart-"+s.ticker);if(!cv)return;if(charts[s.ticker])charts[s.ticker].destroy();const lb=s.dates.map(d=>{const dt=new Date(d);return(dt.getMonth()+1)+"/"+dt.getDate()});charts[s.ticker]=new Chart(cv.getContext("2d"),{type:"line",data:{labels:lb,datasets:[{label:"Gap from Mean ($)",data:s.gap_history,borderColor:s.z_score<0?"#f87171":"#34d399",backgroundColor:s.z_score<0?"rgba(248,113,113,0.1)":"rgba(52,211,153,0.1)",borderWidth:2,fill:true,tension:0.3,pointRadius:0},{label:"Mean (0)",data:Array(s.prices.length).fill(0),borderColor:"#60a5fa",borderWidth:2,borderDash:[5,5],fill:false,pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:"top",labels:{color:"#94a3b8",boxWidth:10,padding:6,font:{size:9}}}},scales:{x:{grid:{color:"rgba(71,85,105,0.2)"},ticks:{color:"#64748b",maxTicksLimit:5,font:{size:9}}},y:{grid:{color:"rgba(71,85,105,0.2)"},ticks:{color:"#64748b",font:{size:9},callback:v=>"$"+v.toFixed(0)}}}}})}</script></body></html>'''
 
-if __name__=='__main__':
-    port=int(os.environ.get('PORT',5000))
-    print("\n"+"="*55+"\n   S&P 500 Mean Reversion Analysis\n"+"="*55)
-    print(f"\n   Open: http://127.0.0.1:{port}\n\n   Press Ctrl+C to stop\n"+"="*55+"\n")
-    app.run(host='0.0.0.0',port=port,debug=False)
+HTML = '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>S&P 500 Oversold Stock Scanner</title><script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b,#0f172a);min-height:100vh;color:#e2e8f0}.container{max-width:1400px;margin:0 auto;padding:20px}.header{text-align:center;padding:40px 20px;margin-bottom:30px}.header h1{font-size:2.2rem;font-weight:700;background:linear-gradient(135deg,#22c55e,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}.header p{color:#94a3b8}.header .subtitle{font-size:0.9rem;color:#22c55e;margin-top:8px}.controls{background:rgba(30,41,59,0.8);border:1px solid rgba(71,85,105,0.5);border-radius:16px;padding:24px;margin-bottom:30px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}.btn{padding:14px 28px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer}.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);color:white}.btn-success{background:linear-gradient(135deg,#22c55e,#16a34a);color:white}.btn:disabled{background:#475569;cursor:not-allowed}.btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(59,130,246,0.4)}.progress-section{flex:1;min-width:200px}.progress-bar{height:8px;background:#334155;border-radius:4px;overflow:hidden;margin-bottom:8px}.progress-fill{height:100%;background:linear-gradient(90deg,#22c55e,#34d399);transition:width 0.3s}.progress-text{font-size:13px;color:#94a3b8}.hidden{display:none!important}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:30px}.stat-card{background:rgba(30,41,59,0.6);border:1px solid rgba(71,85,105,0.3);border-radius:12px;padding:20px;text-align:center}.stat-label{color:#94a3b8;font-size:12px;text-transform:uppercase}.stat-value{font-size:28px;font-weight:700;margin-top:8px}.stat-value.green{color:#34d399}.stat-value.blue{color:#60a5fa}.results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px}.stock-card{background:rgba(30,41,59,0.8);border:1px solid rgba(34,197,94,0.3);border-radius:16px;padding:24px;transition:all 0.3s}.stock-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.5)}.stock-header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(71,85,105,0.3)}.stock-ticker{font-size:22px;font-weight:700}.stock-company{font-size:13px;color:#94a3b8;margin-top:4px}.prob-value{font-size:26px;font-weight:700;color:#34d399}.prob-label{font-size:11px;color:#94a3b8}.metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.metric{background:rgba(15,23,42,0.5);border-radius:8px;padding:10px;text-align:center}.metric-label{font-size:10px;color:#64748b;text-transform:uppercase}.metric-value{font-size:14px;font-weight:600;margin-top:4px}.metric-value.positive{color:#34d399}.metric-value.negative{color:#f87171}.signal-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:12px;background:rgba(34,197,94,0.2);color:#34d399}.signal-badge.strong{background:rgba(34,197,94,0.3);color:#22c55e}.chart-container{height:180px;margin-top:12px;background:rgba(15,23,42,0.3);border-radius:8px;padding:10px}.empty-state{text-align:center;padding:80px 20px;color:#64748b}.empty-state h3{font-size:22px;color:#94a3b8;margin-bottom:12px}.footer{text-align:center;padding:40px 20px;color:#64748b;font-size:13px}</style></head><body><div class="container"><header class="header"><h1>S&P 500 Oversold Stock Scanner</h1><p>Top 10 OVERSOLD stocks most likely to revert to their mean within 30 days</p><p class="subtitle">🟢 LONG OPPORTUNITIES ONLY - Using 1 Year of Yahoo Finance Data</p></header><div class="controls"><button class="btn btn-success" id="fetchBtn">Fetch S&P 500 Data</button><div class="progress-section hidden" id="progressSection"><div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div><p class="progress-text" id="progressText">Starting...</p></div><button class="btn btn-primary" id="analyzeBtn" disabled>Find Top 10 Oversold</button></div><div class="stats-grid"><div class="stat-card"><p class="stat-label">Stocks Loaded</p><p class="stat-value" id="stocksLoaded">0</p></div><div class="stat-card"><p class="stat-label">Oversold Found</p><p class="stat-value green" id="candidatesFound">-</p></div><div class="stat-card"><p class="stat-label">Avg Probability</p><p class="stat-value blue" id="avgProbability">-</p></div><div class="stat-card"><p class="stat-label">Last Updated</p><p class="stat-value" id="lastUpdated" style="font-size:16px">-</p></div></div><div id="resultsContainer"><div class="empty-state"><h3>No Analysis Yet</h3><p>Click "Fetch S&P 500 Data" then "Find Top 10 Oversold"</p></div></div><footer class="footer"><p>Oversold Stock Scanner | Data from Yahoo Finance | LONG positions only | For informational purposes</p></footer></div><script>let charts={},poll=null;fetch("/api/status").then(r=>r.json()).then(d=>{document.getElementById("stocksLoaded").textContent=d.stocks_loaded;if(d.stocks_loaded>0){document.getElementById("analyzeBtn").disabled=false;if(d.last_fetch)document.getElementById("lastUpdated").textContent=d.last_fetch.split(" ")[1]}});document.getElementById("fetchBtn").onclick=function(){this.disabled=true;document.getElementById("progressSection").classList.remove("hidden");document.getElementById("progressFill").style.width="0%";fetch("/api/fetch",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.error){alert(d.error);document.getElementById("fetchBtn").disabled=false;return}poll=setInterval(pollStatus,1000)})};function pollStatus(){fetch("/api/status").then(r=>r.json()).then(d=>{document.getElementById("stocksLoaded").textContent=d.stocks_loaded;if(d.in_progress){const p=d.total>0?(d.completed/d.total*100):0;document.getElementById("progressFill").style.width=p+"%";document.getElementById("progressText").textContent=d.message}else{clearInterval(poll);document.getElementById("progressFill").style.width="100%";document.getElementById("progressText").textContent=d.message;document.getElementById("fetchBtn").disabled=false;if(d.stocks_loaded>0){document.getElementById("analyzeBtn").disabled=false;if(d.last_fetch)document.getElementById("lastUpdated").textContent=d.last_fetch.split(" ")[1]}}})}document.getElementById("analyzeBtn").onclick=function(){this.disabled=true;this.textContent="Analyzing...";fetch("/api/analyze").then(r=>r.json()).then(d=>{if(d.error)alert(d.error);else render(d);this.disabled=false;this.textContent="Find Top 10 Oversold"})};function render(d){document.getElementById("candidatesFound").textContent=d.candidates_found;if(d.results.length>0){const avg=d.results.reduce((s,r)=>s+r.reversion_probability,0)/d.results.length;document.getElementById("avgProbability").textContent=(avg*100).toFixed(1)+"%"}const c=document.getElementById("resultsContainer");if(d.results.length===0){c.innerHTML='<div class="empty-state"><h3>No Oversold Candidates Found</h3><p>No stocks currently meet the oversold criteria (Z-score ≤ -1.0)</p></div>';return}let h='<div class="results-grid">';d.results.forEach((s,i)=>{const sigClass=s.signal_strength.includes("STRONG")?"strong":"";h+=`<div class="stock-card"><div class="stock-header"><div><div class="stock-ticker">#${i+1} ${s.ticker}</div><div class="stock-company">${s.company_name}</div></div><div style="text-align:right"><div class="prob-value">${(s.reversion_probability*100).toFixed(1)}%</div><div class="prob-label">Reversion Prob.</div></div></div><span class="signal-badge ${sigClass}">${s.signal_strength}</span><div class="metrics-grid"><div class="metric"><div class="metric-label">Current</div><div class="metric-value">$${s.current_price.toFixed(2)}</div></div><div class="metric"><div class="metric-label">Mean (Target)</div><div class="metric-value positive">$${s.mean_price.toFixed(2)}</div></div><div class="metric"><div class="metric-label">Upside</div><div class="metric-value positive">+${Math.abs(s.gap_percentage).toFixed(1)}%</div></div><div class="metric"><div class="metric-label">Z-Score</div><div class="metric-value negative">${s.z_score.toFixed(2)}σ</div></div><div class="metric"><div class="metric-label">RSI</div><div class="metric-value">${s.rsi.toFixed(1)}</div></div><div class="metric"><div class="metric-label">Exp. Days</div><div class="metric-value">${s.expected_days.toFixed(0)}</div></div></div><div class="chart-container"><canvas id="chart-${s.ticker}"></canvas></div></div>`});h+="</div>";c.innerHTML=h;d.results.forEach(s=>chart(s))}function chart(s){const cv=document.getElementById("chart-"+s.ticker);if(!cv)return;if(charts[s.ticker])charts[s.ticker].destroy();const lb=s.dates.map(d=>{const dt=new Date(d);return(dt.getMonth()+1)+"/"+dt.getDate()});charts[s.ticker]=new Chart(cv.getContext("2d"),{type:"line",data:{labels:lb,datasets:[{label:"Gap from Mean ($)",data:s.gap_history,borderColor:"#f87171",backgroundColor:"rgba(248,113,113,0.1)",borderWidth:2,fill:true,tension:0.3,pointRadius:0},{label:"Mean (Target)",data:Array(s.prices.length).fill(0),borderColor:"#22c55e",borderWidth:2,borderDash:[5,5],fill:false,pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:"top",labels:{color:"#94a3b8",boxWidth:10,padding:6,font:{size:9}}}},scales:{x:{grid:{color:"rgba(71,85,105,0.2)"},ticks:{color:"#64748b",maxTicksLimit:5,font:{size:9}}},y:{grid:{color:"rgba(71,85,105,0.2)"},ticks:{color:"#64748b",font:{size:9},callback:v=>"$"+v.toFixed(0)}}}}})}</script></body></html>'''
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    print("\n" + "=" * 60)
+    print("   S&P 500 OVERSOLD STOCK SCANNER")
+    print("   Using Yahoo Finance (1 Year Data)")
+    print("=" * 60)
+    print(f"\n   Open: http://127.0.0.1:{port}")
+    print("\n   Press Ctrl+C to stop")
+    print("=" * 60 + "\n")
+    app.run(host='0.0.0.0', port=port, debug=False)
